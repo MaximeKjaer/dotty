@@ -429,7 +429,11 @@ class Scala2Unpickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClas
       if (tpnme.ScalaValueNames.contains(defn.scalaClassName(owner))) flags | Stable else flags
 
     def markClassStable(owner: Symbol, name: Name, flags: FlagSet): FlagSet = {
-      val stableClasses: Set[Symbol] = Set(ctx.requiredClass("scala.math.BigInt"), ctx.requiredClass("scala.math.BigInt$"))
+      val stableClasses: Set[Symbol] = Set(
+        ctx.requiredClass("scala.math.BigInt"),
+        ctx.requiredClass("scala.math.BigInt$"),
+        ctx.requiredClass("scala.math.Ordered")
+      )
       if (stableClasses.contains(owner)) {
         flags | Stable
       } else {
