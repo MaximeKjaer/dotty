@@ -428,6 +428,15 @@ class Scala2Unpickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClas
     def markPrimitiveStable(owner: Symbol, name: Name, flags: FlagSet): FlagSet =
       if (tpnme.ScalaValueNames.contains(defn.scalaClassName(owner))) flags | Stable else flags
 
+    def markClassStable(owner: Symbol, name: Name, flags: FlagSet): FlagSet = {
+      val stableClasses: Set[Symbol] = Set(ctx.requiredClass("scala.math.BigInt"), ctx.requiredClass("scala.math.BigInt$"))
+      if (stableClasses.contains(owner)) {
+        flags | Stable
+      } else {
+        flags
+      }
+    }
+
     tag match {
       case NONEsym => return NoSymbol
       case EXTref | EXTMODCLASSref => return readExtSymbol()
@@ -452,7 +461,7 @@ class Scala2Unpickler(bytes: Array[Byte], classRoot: ClassDenotation, moduleClas
       name =
         if (name == nme.TRAIT_CONSTRUCTOR) nme.CONSTRUCTOR
         else name.asTermName.unmangle(Scala2MethodNameKinds)
-      flags = markPrimitiveStable(owner, name, flags)
+      flags = markPrimitiveStable(owner, name, flags) | markClassStable(owner, name, flags)
     }
     if ((flags is Scala2ExpandedName)) {
       name = name.unmangle(ExpandedName)

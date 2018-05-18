@@ -140,6 +140,9 @@ trait TypeExtractor { this: ExtractorBase =>
 
   import ExtractorUtils.freshVar
 
+  lazy val BigIntClass = defn.BigIntClass
+  lazy val BigIntCompanionClass = defn.BigIntCompanionClass
+
   protected def freshSubject(tp: Type, name: Name = ExtractorUtils.nme.VAR_AUX)(implicit xctx: ExtractionContext): Var =
     freshVar(ixType(tp.classSymbol.typeRef), name.toString)
 
@@ -165,6 +168,7 @@ trait TypeExtractor { this: ExtractorBase =>
         case tpe if tpe.typeSymbol == defn.LongClass    => ix.Int64Type()
         case tpe if tpe.typeSymbol == defn.BooleanClass => ix.BooleanType()
         case tpe if tpe.typeSymbol == defn.UnitClass    => ix.UnitType()
+        case tpe if tpe.classSymbol == BigIntClass      => ix.IntegerType() // Todo ask: why not typeSymbol?
 
         case tpe => xctx.extractionError(s"Cannot extract ixType of ${tpe.show} ($tpe)")
       }
@@ -183,16 +187,18 @@ trait ExprExtractor { this: Extractor =>
   protected lazy val BooleanClass: ClassSymbol = defn.BooleanClass
   protected lazy val IntType: Type = defn.IntType
   protected lazy val IntClass: ClassSymbol = defn.IntClass
+  protected lazy val LongType: Type = defn.LongType
+  protected lazy val LongClass: ClassSymbol = defn.LongClass
   protected lazy val OpsPackageClass: ClassSymbol = defn.OpsPackageClass
 
   protected lazy val PrimitiveClasses: scala.collection.Set[Symbol] =
-    defn.ScalaValueClasses() + ptDefn.PTyperPackageClass
+    defn.ScalaValueClasses() + ptDefn.PTyperPackageClass + BigIntClass + BigIntCompanionClass
 
 
   /** Extracts the Cnstr corresponding to a Dotty Type.
     *  Precondition: Any recursive self-references to `tp` have already been fixed, e.g., via TypeComparer.fixRecs.
     */
-  final protected def typ(tp: Type)(implicit xctx: ExtractionContext): Expr = trace(i"Extractor#typ $tp", ptyper)
+  final protected def typ(tp: Type)(implicit xctx: ExtractionContext): Expr = //trace(i"Extractor#typ $tp", ptyper)
   {
     // RefType as translated under the assumption that it is stable.
     def refType(refTp: RefType) =
@@ -311,6 +317,51 @@ trait ExprExtractor { this: Extractor =>
           case nme.LSL  => ix.BVShiftLeft
           case nme.ASR  => ix.BVAShiftRight
           case nme.LSR  => ix.BVLShiftRight
+          case nme.LT   => ix.LessThan
+          case nme.GT   => ix.GreaterThan
+          case nme.LE   => ix.LessEquals
+          case nme.GE   => ix.GreaterEquals
+          case _        => return fallback
+        }
+        binaryPrim(builder)
+
+      case (LongClass, _, opTp @ MethodTpe(_, List(paramTp), resTp)) if paramTp.widenSingleton == LongType =>
+        val builder: (Expr, Expr) => Expr = opName match {
+          case nme.AND  => ix.BVAnd
+          case nme.OR   => ix.BVOr
+          case nme.XOR  => ix.BVXor
+          case nme.ADD  => ix.Plus
+          case nme.SUB  => ix.Minus
+          case nme.MUL  => ix.Times
+          case nme.DIV  => ix.Division
+          case nme.MOD  => ix.Remainder
+          case nme.LSL  => ix.BVShiftLeft
+          case nme.ASR  => ix.BVAShiftRight
+          case nme.LSR  => ix.BVLShiftRight
+          case nme.LT   => ix.LessThan
+          case nme.GT   => ix.GreaterThan
+          case nme.LE   => ix.LessEquals
+          case nme.GE   => ix.GreaterEquals
+          case _        => return fallback
+        }
+        binaryPrim(builder)
+
+      case (BigIntCompanionClass, nme.apply, opTp @ MethodTpe(_, List(paramTp), _)) =>
+        arg1Expr match {
+          // Note that BVLiterals(_, X) are equivalent to IntXLiterals, but we use BVLiteral notation
+          // so that we can convert to BigInt
+          case v @ ix.BVLiteral(_, 32) if paramTp == IntType => ix.IntegerLiteral(v.toBigInt)
+          case v @ ix.BVLiteral(_, 64) if paramTp == LongType => ix.IntegerLiteral(v.toBigInt)
+          case _ => fallback
+        }
+
+      case (BigIntClass, _, opTp @ MethodTpe(_, List(paramTp), resTp)) if paramTp.widenSingleton == BigIntClass.typeRef =>
+        val builder: (Expr, Expr) => Expr = opName match {
+          case nme.ADD  => ix.Plus
+          case nme.SUB  => ix.Minus
+          case nme.MUL  => ix.Times
+          case nme.DIV  => ix.Division
+          case nme.MOD  => ix.Remainder
           case nme.LT   => ix.LessThan
           case nme.GT   => ix.GreaterThan
           case nme.LE   => ix.LessEquals

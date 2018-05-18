@@ -1092,6 +1092,12 @@ class Definitions {
   def isErasedFunctionType(tp: Type)(implicit ctx: Context) =
     isFunctionType(tp) && tp.dealias.typeSymbol.name.isErasedFunction
 
+
+  // ----- Basic non-primitive classes ----------------------------------------------
+
+  lazy val BigIntClass = ctx.requiredClass("scala.math.BigInt".toTypeName)
+  lazy val BigIntCompanionClass = ctx.requiredClass("scala.math.BigInt$".toTypeName) // TODO(MaximeKjaer) IMPROVE
+
   // ----- primitive value class machinery ------------------------------------------
 
   /** This class would also be obviated by the implicit function type design */
