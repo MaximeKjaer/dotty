@@ -70,6 +70,11 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
         val expr = if (flags.contains(s.IsPure)) fi else inlineAndFreshen(fi)
         transform(expr)
 
+      case s.ClassConstructor(id, args) =>
+        val tps = args.map(a => transform(a.getType(syms)))
+        val transformedArgs = args.map(transform)
+        t.ADT(id, tps, transformedArgs)
+
       case _ => super.transform(e)
     }
   }

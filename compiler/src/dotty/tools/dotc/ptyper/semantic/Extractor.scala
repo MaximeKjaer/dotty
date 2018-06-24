@@ -579,6 +579,8 @@ trait ExprExtractor { this: Extractor =>
     def isExtractable(sym: Symbol) = sym.hasAnnotation(ptDefn.ExtractableAnnot)
     def isFunctionCall(fn: TermRef) =
       defn.isFunctionType(fn.prefix.dealias.widenSingleton) && fn.name == nme.apply
+    def isADTConstructorCall(fn: TermRef) =
+      ADTClassifier.isADT(fn.prefix.widen.classSymbol.companionClass) && fn.name == nme.apply
 
     // NOTE(gsps): We rely on the fact that for methods without @extract we extract the result type as a body
     def approximatedMethodCall = xctx.approximateOrFail(s"Emitted conservative approximation for method call $tp",
@@ -586,6 +588,7 @@ trait ExprExtractor { this: Extractor =>
 
     if (isStable) {
       if (primitiveClazzOpt.isDefined)   primitiveOp(fn, argss, primitiveClazzOpt.get)
+      else if (isADTConstructorCall(fn)) adtConstructorCall(fn, argss)
       else if (isFunctionCall(fn))       functionCall(fn.prefix, argss)
       else if (isExtractable(fn.symbol)) methodCall(fn, argss)
       else                               approximatedMethodCall
@@ -669,6 +672,11 @@ trait ExprExtractor { this: Extractor =>
 
   final protected def methodCall(fn: TermRef, argss: List[List[Type]])(implicit xctx: ExtractionContext): Expr =
     trees.MethodInvocation(typ(fn.prefix), getMethodId(fn.symbol), argss.flatten.map(typ))
+
+  final protected def adtConstructorCall(applyFn: TermRef, argss: List[List[Type]])(implicit xctx: ExtractionContext): Expr = {
+    val companion = applyFn.prefix.widen.classSymbol.companionClass
+    trees.ClassConstructor(getClassId(companion), argss.flatten.map(typ))
+  }
 
   final protected def predRefinedType(tp: PredicateRefinedType)(implicit xctx: ExtractionContext): Expr =
   {
