@@ -89,15 +89,13 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
     }
   }
 
-  sealed case class ClassConstructor(cls: Id, args: Seq[Expr]) extends Expr with CachingTyped {
+  sealed case class ADTConstructor(cls: Id, args: Seq[Expr]) extends Expr with CachingTyped {
     override protected def computeType(implicit s: Symbols): Type = {
       s.lookupClass(cls).map(cd => {
         val tpes = cd.cnstrParams.map(_.tpe)
         checkParamTypes(args, tpes, ADTType(cd.id, tpes))
       }).getOrElse(Untyped)
     }
-
-    override def toString(): String = s"$cls(${args.mkString(", ")})"
   }
 
 
@@ -219,9 +217,9 @@ trait TreeDeconstructor extends inox.ast.TreeDeconstructor {
       val s.MethodInvocation(recv, method, args) = expr
       (Seq(method), Seq(), recv +: args, Seq(), (ids, _, es, _) => t.MethodInvocation(es.head, ids.head, es.tail))
     },
-    classOf[s.ClassConstructor] -> { expr =>
-      val s.ClassConstructor(cls, args) = expr
-      (Seq(cls), Seq(), args, Seq(), (ids, _, es, _) => t.ClassConstructor(ids.head, es))
+    classOf[s.ADTConstructor] -> { expr =>
+      val s.ADTConstructor(cls, args) = expr
+      (Seq(cls), Seq(), args, Seq(), (ids, _, es, _) => t.ADTConstructor(ids.head, es))
     }
 
   )

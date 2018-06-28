@@ -675,7 +675,7 @@ trait ExprExtractor { this: Extractor =>
 
   final protected def adtConstructorCall(applyFn: TermRef, argss: List[List[Type]])(implicit xctx: ExtractionContext): Expr = {
     val companion = applyFn.prefix.widen.classSymbol.companionClass
-    trees.ClassConstructor(getClassId(companion), argss.flatten.map(typ))
+    trees.ADTConstructor(getClassId(companion), argss.flatten.map(typ))
   }
 
   final protected def predRefinedType(tp: PredicateRefinedType)(implicit xctx: ExtractionContext): Expr =
