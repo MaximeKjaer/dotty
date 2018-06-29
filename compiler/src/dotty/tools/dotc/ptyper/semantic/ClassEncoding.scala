@@ -2,13 +2,16 @@ package dotty.tools.dotc
 package ptyper.semantic
 
 import inox.{trees => ix}
+import ix._
+import ix.dsl._
 
 /**
   * Lowers class abstractions to the inox level. Namely, we translate
   *  - ClassDef         -> nothing
-  *  - ClassType        -> "Object" ADTType
+  *  - ClassType        -> ADTType or "Object" ADTType
   *  - ClassThis        -> reference to receiver
   *  - ClassSelector    -> FunctionInvocation on accessor function with receiver argument
+  *  - ClassNew         -> ADT
   *  - MethodInvocation -> FunctionInvocation on lifted method with with receiver argument
   */
 class ClassEncoding extends inox.ast.SymbolTransformer { self =>
@@ -18,9 +21,6 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
   /** Object Sort and Type **/
 
   object Definitions {
-    import ix._
-    import ix.dsl._
-
     val objSort = mkSort(FreshIdentifier("Object"))()(_ => Seq(
       (FreshIdentifier("Object"), Seq("ptr" :: IntegerType()))
     ))
@@ -32,13 +32,16 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
 
   /** Lowering **/
 
-  class Transformer(syms: s.Symbols) extends inox.ast.TreeTransformer {
+  private class Transformer(syms: s.Symbols) extends inox.ast.TreeTransformer {
     val s: self.s.type = self.s
     val t: self.t.type = self.t
 
     var thisClsToVar: Map[Id, t.Variable] = Map.empty
+    val adtDefs = syms.classes.values.filter(_.flags.contains(trees.IsADT))
+    val adtIds = adtDefs.map(_.id).toSet
 
     override def transform(tpe: s.Type): t.Type = tpe match {
+      case s.ClassType(id) if adtIds.contains(id) => T(id)()
       case s.ClassType(_) => Definitions.obj
       case _ => super.transform(tpe)
     }
@@ -70,7 +73,7 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
         val expr = if (flags.contains(s.IsPure)) fi else inlineAndFreshen(fi)
         transform(expr)
 
-      case s.ADTConstructor(id, args) =>
+      case s.ClassNew(id, args) =>
         t.ADT(id, Seq(), args.map(transform))
 
       case _ => super.transform(e)
@@ -83,12 +86,15 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
 
     def transformFunDef(fd: s.FunDef): t.FunDef = {
       var maybeMemberOf: Option[Id] = None
+
+      // Strip out our flags, noting if the function has an owner class
       val flags1 = fd.flags.filter {
         case s.IsMemberOf(cls) => maybeMemberOf = Some(cls); false
-        case s.IsPure | s.HasImpreciseBody | s.IsMethod | s.IsGlobalBinding => false
+        case s.IsPure | s.HasImpreciseBody | s.IsMethod | s.IsGlobalBinding | s.IsADT => false
         case _ => true
       }
 
+      // Prepend "this" to param list if function has owner
       val params1 = maybeMemberOf match {
         case Some(owner) =>
           val thisVd: s.ValDef = s.ValDef(FreshIdentifier("this"), s.ClassType(owner))
@@ -103,8 +109,17 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
       transformer.transform(fd1)
     }
 
+    // Make ADT sort
+    def transformADT(cd: s.ClassDef): t.ADTSort = {
+      mkSort(cd.id)() {
+        case Seq() => Seq((cd.id, cd.cnstrParams.map(transformer.transform)))
+      }
+    }
+
+    val adtSorts = transformer.adtDefs.map(transformADT)
     val functions: Seq[t.FunDef] = syms.functions.values.map(transformFunDef).toSeq
-    val sorts: Seq[t.ADTSort] = syms.sorts.values.map(transformer.transform).toSeq ++ Seq(Definitions.objSort)
+    val sorts: Seq[t.ADTSort] =
+      syms.sorts.values.map(transformer.transform).toSeq ++ adtSorts :+ Definitions.objSort
 
     t.NoSymbols.withFunctions(functions).withSorts(sorts)
   }

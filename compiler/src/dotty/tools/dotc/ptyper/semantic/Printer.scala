@@ -59,6 +59,9 @@ trait Printer extends inox.ast.Printer {
       if (args.nonEmpty)
         p"($args)"
 
+    case ClassNew(cls, args) =>
+      p"new $cls($args)"
+
     // Types
 
     case ClassType(cls) =>

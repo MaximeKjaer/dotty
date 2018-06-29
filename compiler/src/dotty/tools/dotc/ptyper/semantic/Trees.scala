@@ -81,20 +81,19 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
       s.lookupFunction(field).map(_.returnType).getOrElse(Untyped)
   }
 
+  sealed case class ClassNew(cls: Id, args: Seq[Expr]) extends Expr with CachingTyped {
+    override protected def computeType(implicit s: Symbols): Type = {
+      s.lookupClass(cls).map(cd => {
+        checkParamTypes(args, cd.cnstrParams.map(_.tpe), ClassType(cd.id))
+      }).getOrElse(Untyped)
+    }
+  }
+
   sealed case class MethodInvocation(recv: Expr, method: Id, args: Seq[Expr]) extends Expr with CachingTyped {
     override protected def computeType(implicit s: Symbols): Type = {
       s.lookupFunction(method)
         .map(fd => checkParamTypes(args, fd.params.map(_.tpe), fd.returnType))
         .getOrElse(Untyped)
-    }
-  }
-
-  sealed case class ADTConstructor(cls: Id, args: Seq[Expr]) extends Expr with CachingTyped {
-    override protected def computeType(implicit s: Symbols): Type = {
-      s.lookupClass(cls).map(cd => {
-        val tpes = cd.cnstrParams.map(_.tpe)
-        checkParamTypes(args, tpes, ADTType(cd.id, tpes))
-      }).getOrElse(Untyped)
     }
   }
 
@@ -104,6 +103,7 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
   case object IsPure extends Flag("pure", Seq.empty)
   case object HasImpreciseBody extends Flag("impreciseBody", Seq.empty)
   case object IsMethod extends Flag("method", Seq.empty)
+  case object IsADT extends Flag("adt", Seq.empty)
   case class IsMemberOf(cls: Id) extends Flag("memberOf", Seq(cls))
 
   case object IsGlobalBinding extends Flag("globalBinding", Seq.empty)
@@ -217,9 +217,9 @@ trait TreeDeconstructor extends inox.ast.TreeDeconstructor {
       val s.MethodInvocation(recv, method, args) = expr
       (Seq(method), Seq(), recv +: args, Seq(), (ids, _, es, _) => t.MethodInvocation(es.head, ids.head, es.tail))
     },
-    classOf[s.ADTConstructor] -> { expr =>
-      val s.ADTConstructor(cls, args) = expr
-      (Seq(cls), Seq(), args, Seq(), (ids, _, es, _) => t.ADTConstructor(ids.head, es))
+    classOf[s.ClassNew] -> { expr =>
+      val s.ClassNew(cls, args) = expr
+      (Seq(cls), Seq(), args, Seq(), (ids, _, es, _) => t.ClassNew(ids.head, es))
     }
 
   )

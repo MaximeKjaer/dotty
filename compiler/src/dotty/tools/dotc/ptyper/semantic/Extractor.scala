@@ -384,9 +384,9 @@ trait ClassExtractor {this: Extractor =>
           .filter(d => d.isTerm && d.symbol.owner == csym)
           .map(funDefFromDenot)
 
-      val flags: Seq[trees.Flag] =
-        if (csym.enclosingClass.exists) Seq(trees.IsMemberOf(xst.symbolToId(csym.enclosingClass))) else Seq.empty
-
+      var flags: Seq[trees.Flag] = Seq.empty
+      if (csym.enclosingClass.exists) flags +:= trees.IsMemberOf(xst.symbolToId(csym.enclosingClass))
+      if (ADTClassifier.isADT(csym)) flags +:= trees.IsADT
       val cd = trees.ClassDef(cid, cnstrParams, flags)
       (cd, methods)
     }
@@ -675,7 +675,7 @@ trait ExprExtractor { this: Extractor =>
 
   final protected def adtConstructorCall(applyFn: TermRef, argss: List[List[Type]])(implicit xctx: ExtractionContext): Expr = {
     val companion = applyFn.prefix.widen.classSymbol.companionClass
-    trees.ADTConstructor(getClassId(companion), argss.flatten.map(typ))
+    trees.ClassNew(getClassId(companion), argss.flatten.map(typ))
   }
 
   final protected def predRefinedType(tp: PredicateRefinedType)(implicit xctx: ExtractionContext): Expr =
