@@ -83,9 +83,9 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
 
   sealed case class ClassNew(cls: Id, args: Seq[Expr]) extends Expr with CachingTyped {
     override protected def computeType(implicit s: Symbols): Type = {
-      s.lookupClass(cls).map(cd => {
-        checkParamTypes(args, cd.cnstrParams.map(_.tpe), ClassType(cd.id))
-      }).getOrElse(Untyped)
+      s.lookupClass(cls)
+        .map(cd => checkParamTypes(args, cd.cnstrParams.map(_.tpe), ClassType(cd.id)))
+        .getOrElse(Untyped)
     }
   }
 
