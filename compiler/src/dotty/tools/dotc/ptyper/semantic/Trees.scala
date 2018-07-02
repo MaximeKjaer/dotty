@@ -262,6 +262,8 @@ trait TreeDeconstructor extends inox.ast.TreeDeconstructor {
       (Seq(cls), Seq(), Seq(), (ids, _, _) => t.IsMemberOf(ids.head))
     case s.IsGlobalBinding =>
       (Seq(), Seq(), Seq(), (_, _, _) => t.IsGlobalBinding)
+    case s.IsADT =>
+      (Seq(), Seq(), Seq(), (_, _, _) => t.IsADT)
     case _ =>
       super.deconstruct(f)
   }
