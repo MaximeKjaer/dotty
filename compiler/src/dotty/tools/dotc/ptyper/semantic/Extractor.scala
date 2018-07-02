@@ -7,7 +7,7 @@ import Utils.{checkErrorType, normalizedApplication}
 
 import core.Contexts.Context
 import core.Decorators._
-import core.Flags.{EmptyFlags, Method, Stable, TypeParam}
+import core.Flags.{EmptyFlags, Method, Stable, TypeParam, ParamAccessor}
 import core.Names.{Name, TermName}
 import core.NameKinds
 import core.StdNames.nme
@@ -317,6 +317,9 @@ trait ClassExtractor {this: Extractor =>
       def toParamValDefs(paramRefs: List[TermParamRef]): List[trees.ValDef] =
         paramRefs.map(freshVar(_).toVal)
 
+      val cnstrParamRefs = allParamRefs(csym.denot.primaryConstructor.info.stripMethodPrefix)
+      val cnstrParams: Seq[trees.ValDef] = toParamValDefs(cnstrParamRefs)
+
       def funDefFromDenot(denot: core.Denotations.SingleDenotation): trees.FunDef = {
         val msym = denot.symbol
         val fid = xst.symbolToId(msym)
@@ -325,6 +328,10 @@ trait ClassExtractor {this: Extractor =>
         var flags: Seq[trees.Flag] = Seq(trees.IsMemberOf(cid))
         if (msym is Stable) flags +:= trees.IsPure
         if (msym is Method) flags +:= trees.IsMethod
+        if (msym is ParamAccessor) {
+          val paramRef = cnstrParamRefs.find(_.paramName == msym.name)
+          if (paramRef.isDefined) flags +:= trees.IsParamAccessor(paramRef.get.paramNum)
+        }
 
         val paramRefs = allParamRefs(msym.info.stripMethodPrefix)
         val params = toParamValDefs(paramRefs)
@@ -375,9 +382,6 @@ trait ClassExtractor {this: Extractor =>
 
         new trees.FunDef(fid, Seq.empty, params, ixType(resType), body, flags)
       }
-
-      val cnstrParams: Seq[trees.ValDef] =
-        toParamValDefs(allParamRefs(csym.denot.primaryConstructor.info.stripMethodPrefix))
 
       val methods: Seq[trees.FunDef] =
         csym.classInfo.allMembers

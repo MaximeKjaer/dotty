@@ -58,8 +58,16 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
         assert(thisClsToVar.contains(cls), s"Unbound this reference: $e (bindings: $thisClsToVar)")
         thisClsToVar(cls)
 
-      case s.ClassSelector(recv, field) =>
-        t.FunctionInvocation(field, Seq.empty, Seq(transform(recv)))
+      case cs@s.ClassSelector(recv, field) =>
+        def functionInvocation = t.FunctionInvocation(field, Seq.empty, Seq(transform(recv)))
+        recv.getType(syms) match {
+          case s.ClassType(cls) if adtIds.contains(cls) =>
+            cs.cnstrParam(syms) match {
+              case Some(param) => t.ADTSelector(transform(recv), param.id)
+              case _ => functionInvocation
+            }
+          case _ => functionInvocation
+        }
 
       case s.MethodInvocation(recv, method, args) =>
         /** When translating method calls we end up with three cases depending on how the method was annotated:
@@ -90,7 +98,7 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
       // Strip out our flags, noting if the function has an owner class
       val flags1 = fd.flags.filter {
         case s.IsMemberOf(cls) => maybeMemberOf = Some(cls); false
-        case s.IsPure | s.HasImpreciseBody | s.IsMethod | s.IsGlobalBinding | s.IsADT => false
+        case s.IsPure | s.HasImpreciseBody | s.IsMethod | s.IsGlobalBinding | s.IsADT | s.IsParamAccessor(_) => false
         case _ => true
       }
 

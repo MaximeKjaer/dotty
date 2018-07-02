@@ -77,8 +77,37 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
   }
 
   sealed case class ClassSelector(recv: Expr, field: Id) extends Expr with CachingTyped {
-    override protected def computeType(implicit s: Symbols): Type =
-      s.lookupFunction(field).map(_.returnType).getOrElse(Untyped)
+    // Cached computation of constructor parameter
+    private var lastSymbols: Symbols = _
+    private var lastCnstrParam: Option[ValDef] = None
+    private def computeCnstrParam(implicit s: Symbols): Option[ValDef] = recv.getType match {
+      case ClassType(cls) =>
+        val paramIndex = s.lookupFunction(field).flatMap(_.flags.collectFirst {
+          case IsParamAccessor(i) => i
+        })
+        val cnstrParams = s.lookupClass(cls).map(_.cnstrParams)
+        if (paramIndex.isDefined) cnstrParams.map(params => params(paramIndex.get))
+        else None
+      case _ => None
+    }
+
+    def cnstrParam(implicit s: Symbols): Option[ValDef] = {
+      if (s ne lastSymbols) {
+        lastSymbols = s
+        lastCnstrParam = computeCnstrParam
+      }
+      lastCnstrParam
+    }
+
+    override protected def computeType(implicit s: Symbols): Type = recv.getType match {
+      case ClassType(cls) =>
+        val methodTpe = s.lookupClass(cls).flatMap(_.methods.find(m => m.id == field)).map(_.returnType)
+        val cnstrTpe = cnstrParam.map(_.tpe)
+        methodTpe
+          .orElse(cnstrTpe)
+          .getOrElse(throw new AssertionError(s"Could not find ${field.uniqueName} in $recv"))
+      case _ => throw new AssertionError(s"recv $recv of a ClassSelector must be a ClassType")
+    }
   }
 
   sealed case class ClassNew(cls: Id, args: Seq[Expr]) extends Expr with CachingTyped {
@@ -105,6 +134,7 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
   case object IsMethod extends Flag("method", Seq.empty)
   case object IsADT extends Flag("adt", Seq.empty)
   case class IsMemberOf(cls: Id) extends Flag("memberOf", Seq(cls))
+  case class IsParamAccessor(paramIndex: Int) extends Flag("paramAccessor", Seq(paramIndex))
 
   case object IsGlobalBinding extends Flag("globalBinding", Seq.empty)
 
@@ -264,6 +294,8 @@ trait TreeDeconstructor extends inox.ast.TreeDeconstructor {
       (Seq(), Seq(), Seq(), (_, _, _) => t.IsGlobalBinding)
     case s.IsADT =>
       (Seq(), Seq(), Seq(), (_, _, _) => t.IsADT)
+    case s.IsParamAccessor(paramIndex) =>
+      (Seq(), Seq(), Seq(), (_, _, _) => t.IsParamAccessor(paramIndex))
     case _ =>
       super.deconstruct(f)
   }
