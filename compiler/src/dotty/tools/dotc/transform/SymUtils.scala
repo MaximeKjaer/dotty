@@ -132,6 +132,14 @@ class SymUtils(val self: Symbol) extends AnyVal {
     }
   }
 
+  def overrides(name: Name, excluded: Flags.FlagSet)(implicit ctx: Context): Boolean = {
+    val method = self.info.findDecl(name, excluded)
+    method match {
+      case NoDenotation => false
+      case _            => method.symbol.is(Flags.Override)
+    }
+  }
+
   /** If this symbol is an enum value or a named class, register it as a child
    *  in all direct parent classes which are sealed.
    *   @param  @late  If true, register only inaccessible children (all others are already
@@ -164,6 +172,20 @@ class SymUtils(val self: Symbol) extends AnyVal {
     self.annotations.collect {
       case Annotation.Child(child) => child
     }
+
+  /** If this is a sealed class, its known descendants */
+  def descendants(implicit ctx: Context): List[Symbol] = {
+    val children = self.children
+    children ++ children.flatMap(_.descendants)
+  }
+
+  def ancestors(implicit ctx: Context): List[Symbol] = {
+    val parents =
+      if (self.isClass) self.asClass.classParents.map(_.classSymbol)
+      else Nil
+
+    parents ++ parents.flatMap(_.ancestors)
+  }
 
   /** Is symbol directly or indirectly owned by a term symbol? */
   @tailrec final def isLocal(implicit ctx: Context): Boolean = {
