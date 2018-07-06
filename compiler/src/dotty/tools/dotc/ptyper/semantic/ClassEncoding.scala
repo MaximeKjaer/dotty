@@ -37,8 +37,8 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
     val t: self.t.type = self.t
 
     var thisClsToVar: Map[Id, t.Variable] = Map.empty
-    val adtDefs = syms.classes.values.filter(_.flags.contains(trees.IsADT))
-    val adtIds = adtDefs.map(_.id).toSet
+    val adtDefs: Iterable[s.ClassDef] = syms.classes.values.filter(_.flags.contains(s.IsADT))
+    val adtIds: Set[Id] = adtDefs.map(_.id).toSet
 
     override def transform(tpe: s.Type): t.Type = tpe match {
       case s.ClassType(id) if adtIds.contains(id) => T(id)()
@@ -124,7 +124,20 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
       }
     }
 
-    val adtSorts = transformer.adtDefs.map(transformADT)
+    def getSort(cd: s.ClassDef): Id = {
+      val extendsFlag = cd.flags.collectFirst {
+        case s.ExtendsAbstract(cls) => cls
+      }
+      extendsFlag.getOrElse(cd.id)
+    }
+
+    val adtConstructors = transformer.adtDefs.filterNot(_.flags.contains(s.IsAbstract))
+    val adtSorts = adtConstructors.groupBy(getSort).map {
+      case (sort, constructors) => mkSort(sort)() {
+        case Seq() => constructors.map(cons => (cons.id, cons.cnstrParams.map(transformer.transform))).toSeq
+      }
+    }
+
     val functions: Seq[t.FunDef] = syms.functions.values.map(transformFunDef).toSeq
     val sorts: Seq[t.ADTSort] =
       syms.sorts.values.map(transformer.transform).toSeq ++ adtSorts :+ Definitions.objSort

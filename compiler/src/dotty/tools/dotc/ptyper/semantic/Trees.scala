@@ -133,6 +133,8 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
   case object HasImpreciseBody extends Flag("impreciseBody", Seq.empty)
   case object IsMethod extends Flag("method", Seq.empty)
   case object IsADT extends Flag("adt", Seq.empty)
+  case object IsAbstract extends Flag("abstract", Seq.empty)
+  case class ExtendsAbstract(cls: Id) extends Flag("extends", Seq(cls))
   case class IsMemberOf(cls: Id) extends Flag("memberOf", Seq(cls))
   case class IsParamAccessor(paramIndex: Int) extends Flag("paramAccessor", Seq(paramIndex))
 
@@ -292,6 +294,10 @@ trait TreeDeconstructor extends inox.ast.TreeDeconstructor {
       (Seq(cls), Seq(), Seq(), (ids, _, _) => t.IsMemberOf(ids.head))
     case s.IsGlobalBinding =>
       (Seq(), Seq(), Seq(), (_, _, _) => t.IsGlobalBinding)
+    case s.IsAbstract =>
+      (Seq(), Seq(), Seq(), (_, _, _) => t.IsAbstract)
+    case s.ExtendsAbstract(cls) =>
+      (Seq(cls), Seq(), Seq(), (ids, _, _) => t.ExtendsAbstract(ids.head))
     case s.IsADT =>
       (Seq(), Seq(), Seq(), (_, _, _) => t.IsADT)
     case s.IsParamAccessor(paramIndex) =>

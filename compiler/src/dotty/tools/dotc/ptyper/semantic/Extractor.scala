@@ -389,8 +389,17 @@ trait ClassExtractor {this: Extractor =>
           .map(funDefFromDenot)
 
       var flags: Seq[trees.Flag] = Seq.empty
+      val adtSort = ADTSort.fromSymbol(csym)
       if (csym.enclosingClass.exists) flags +:= trees.IsMemberOf(xst.symbolToId(csym.enclosingClass))
-      if (ADTClassifier.isADT(csym)) flags +:= trees.IsADT
+      if (adtSort.isDefined) {
+        flags +:= trees.IsADT
+        val ADTSort(sort, constructors) = adtSort.get
+        val others = (sort +: constructors).filter(_ != csym)
+        others.filter(_.isClass).map(_.asClass).foreach(ensureClassExtracted)
+        if (csym != sort) flags +:= trees.ExtendsAbstract(xst.symbolToId(sort))
+        else if (ADTSort.isAbstractADT(csym)) flags +:= trees.IsAbstract
+      }
+
       val cd = trees.ClassDef(cid, cnstrParams, flags)
       (cd, methods)
     }
@@ -584,7 +593,7 @@ trait ExprExtractor { this: Extractor =>
     def isFunctionCall(fn: TermRef) =
       defn.isFunctionType(fn.prefix.dealias.widenSingleton) && fn.name == nme.apply
     def isADTConstructorCall(fn: TermRef) =
-      ADTClassifier.isADT(fn.prefix.widen.classSymbol.companionClass) && fn.name == nme.apply
+      ADTSort.isADT(fn.prefix.widen.classSymbol.companionClass) && fn.name == nme.apply
 
     // NOTE(gsps): We rely on the fact that for methods without @extract we extract the result type as a body
     def approximatedMethodCall = xctx.approximateOrFail(s"Emitted conservative approximation for method call $tp",
