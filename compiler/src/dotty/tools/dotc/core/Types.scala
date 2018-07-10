@@ -2210,7 +2210,7 @@ object Types {
 
   // --- AppliedTermRef ---------------------------------------------------------------------
 
-  /** A precise representation of a term-level application `fn(... args)`. **/
+  /** A precise representation of a term-level application `fn(... args)` or `fn[...args]`. **/
   abstract case class AppliedTermRef(fn: /*TermRef | AppliedTermRef*/ SingletonType, args: List[Type])
     extends CachedProxyType with SingletonType
   {
@@ -2220,6 +2220,7 @@ object Types {
         fn.widenSingleton match {
           case exprTpe: ExprType => myResType = exprTpe.resType
           case methTpe: MethodType => myResType = ctx.typer.applicationResultType(methTpe, args)
+          case polyTpe: PolyType => myResType = polyTpe.instantiate(args)
           case NoType => throw new AssertionError("Unexpected NoType as function of AppliedTermRef (probably " +
             "touched resType before enclosing type was fully initialized).")
           case tp =>  // Only occurs in PredicateRefinedType.SubjectSentinel but should never force resType
@@ -2229,6 +2230,8 @@ object Types {
     }
 
     final def underlying(implicit ctx: Context): Type = resType
+
+    final def isTypeApply(implicit ctx: Context): Boolean = fn.widenSingleton.isInstanceOf[PolyType]
 
     def derivedAppliedTerm(fn: Type, args: List[Type])(implicit ctx: Context): Type =
       if ((this.fn eq fn) && (this.args eq args)) this
@@ -2259,9 +2262,10 @@ object Types {
           unique(new CachedAppliedTermRef(fn, args))
         case fn: AppliedTermRef =>
           unique(new CachedAppliedTermRef(fn, args))
-        case _ =>
+        case _ => // result type of applying fn(args)
           fn.widenDealias match {
             case methTpe: MethodType => ctx.typer.applicationResultType(methTpe, args)
+            case polyTpe: PolyType => polyTpe.instantiate(args)
             case _: WildcardType => WildcardType
             case tp => throw new AssertionError(i"Don't know how to apply $tp.")
           }
