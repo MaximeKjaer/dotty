@@ -148,7 +148,8 @@ object Types {
     /** Does this type denote a stable reference (i.e. singleton type)? */
     final def isStable(implicit ctx: Context): Boolean = stripTypeVar match {
       case tp: TermRef => tp.termSymbol.isStable && tp.prefix.isStable || tp.info.isStable || isFunAppAssumedPure(tp)
-      case tp: AppliedTermRef => tp.fn.isStable && tp.args.forall(_.isStable)
+      case tp: AppliedTermRef => // TODO(mkjaer) not sure if type applys are actually stable...
+        tp.fn.isStable && (tp.isTypeApply || tp.args.forall(_.isStable))
       case _: SingletonType | NoPrefix => true
       case tp: RefinedOrRecType => tp.parent.isStable
       case tp: ExprType => tp.resultType.isStable

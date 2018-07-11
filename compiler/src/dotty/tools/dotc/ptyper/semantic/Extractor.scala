@@ -585,7 +585,7 @@ trait ExprExtractor { this: Extractor =>
 
   // TODO(gsps): Extract constructors
   final protected def appliedTermRef(tp: AppliedTermRef)(implicit xctx: ExtractionContext): Expr = {
-    val MethodCall(fn, argss) = tp
+    val MethodCall(fn, targs, argss) = tp
     val primitiveClazzOpt = fn.prefix.widenDealias.classSymbols.find(PrimitiveClasses.contains)
     val isStable = tp.isStable
 
@@ -594,6 +594,7 @@ trait ExprExtractor { this: Extractor =>
       defn.isFunctionType(fn.prefix.dealias.widenSingleton) && fn.name == nme.apply
     def isADTConstructorCall(fn: TermRef) =
       ADTSort.isADT(fn.prefix.widen.classSymbol.companionClass) && fn.name == nme.apply
+    def isIsInstanceofCall(fn: TermRef) = tp.isTypeApply && fn.name == nme.isInstanceOf_
 
     // NOTE(gsps): We rely on the fact that for methods without @extract we extract the result type as a body
     def approximatedMethodCall = xctx.approximateOrFail(s"Emitted conservative approximation for method call $tp",
@@ -604,6 +605,7 @@ trait ExprExtractor { this: Extractor =>
       else if (isADTConstructorCall(fn)) adtConstructorCall(fn, argss)
       else if (isFunctionCall(fn))       functionCall(fn.prefix, argss)
       else if (isExtractable(fn.symbol)) methodCall(fn, argss)
+      else if (isIsInstanceofCall(fn))   isInstanceofCall(fn, targs.head)
       else                               approximatedMethodCall
     } else {
       typ(fn.underlying.finalResultType)  // FIXME(gsps): Safe, since the precision of our extraction agrees with Dotty?
@@ -691,6 +693,9 @@ trait ExprExtractor { this: Extractor =>
     trees.ClassNew(getClassId(companion), argss.flatten.map(typ))
   }
 
+  final protected def isInstanceofCall(fn: TermRef, cls: Type)(implicit xctx: ExtractionContext): Expr =
+    trees.IsConstructor(typ(fn.prefix), getClassId(cls.classSymbol))
+
   final protected def predRefinedType(tp: PredicateRefinedType)(implicit xctx: ExtractionContext): Expr =
   {
     val subjectExpr = typ(tp.parent)
@@ -704,7 +709,7 @@ trait ExprExtractor { this: Extractor =>
   }
 
   final protected def predicate(tp: AppliedTermRef, subject: Type)(implicit xctx: ExtractionContext): Expr = {
-    val MethodCall(fn, List(args)) = tp
+    val MethodCall(fn, _, List(args)) = tp
     val PredicateRefinedType.SubjectSentinel() :: args1 = args
 
     if (!isPredicateMethod(fn.symbol))
@@ -731,13 +736,16 @@ object ExtractorUtils {
   /* Dotty-related helpers */
 
   object MethodCall {
-    def unapply(tp: AppliedTermRef): Option[(TermRef, List[List[Type]])] = {
-      @tailrec def rec(tp: AppliedTermRef, argss: List[List[Type]]): (TermRef, List[List[Type]]) =
+    type DeconstructedCall = (TermRef, List[Type], List[List[Type]])
+    def unapply(tp: AppliedTermRef)(implicit ctx: Context): Option[DeconstructedCall] = {
+      @tailrec def rec(tp: AppliedTermRef, targs: List[Type], argss: List[List[Type]]): DeconstructedCall = {
+        val (targs1, argss1) = if (tp.isTypeApply) (tp.args ++ targs, argss) else (targs, tp.args :: argss)
         tp.fn match {
-          case fn: TermRef => (fn, tp.args :: argss)
-          case fn: AppliedTermRef => rec(fn, tp.args :: argss)
+          case fn: TermRef => (fn, targs1, tp.args :: argss)
+          case fn: AppliedTermRef => rec(fn, targs1, argss1)
         }
-      Some(rec(tp, Nil))
+      }
+      Some(rec(tp, Nil, Nil))
     }
   }
 

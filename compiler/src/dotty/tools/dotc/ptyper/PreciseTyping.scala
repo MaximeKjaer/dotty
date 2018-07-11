@@ -10,6 +10,7 @@ import core.Phases._
 import core.DenotTransformers._
 import core.Flags._
 import core.NameKinds.PredicateName
+import core.StdNames.{nme => stdNme}
 import core.Symbols._
 import core.Contexts._
 import core.Types._
@@ -21,8 +22,8 @@ import typer.NoChecking
 import typer.ProtoTypes.{FunProto, PolyProto}
 import util.Positions.{NoPosition, Position}
 import util.Stats.track
-
 import config.Printers.ptyper
+import dotty.tools.dotc.ast.Trees.{Ident, Select, TypeApply}
 import reporting.trace
 
 import scala.collection.mutable.{ListBuffer, Map => MutableMap}
@@ -337,6 +338,13 @@ class PreciseTyping2 extends Phase with IdentityDenotTransformer { thisPhase =>
       assignType(untpd.cpy.If(tree)(cond1, thenp2, elsep2), thenp2, elsep2)
     }
 
+
+    override def typedTypeApply(tree: untpd.TypeApply, pt: Type)(implicit ctx: Context): Tree = tree match {
+      case TypeApply(sel@Select(_, stdNme.isInstanceOf_), List(typeParam@Ident(_))) =>
+        val tpe = AppliedTermRef(sel.tpe, List(typedIdent(typeParam, Types.Unchecked).tpe))
+        tree.withType(tpe)
+      case _ => super.typedTypeApply(tree, pt)
+    }
 
     // FIXME(gsps): Bail if we try to extract an impure condition or test against a user-defined (maybe impure) unapply
     override def typedCases(cases: List[untpd.CaseDef], selType: Type, pt: Type)(implicit ctx: Context) = {
