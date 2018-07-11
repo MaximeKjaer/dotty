@@ -305,7 +305,7 @@ trait ClassExtractor {this: Extractor =>
     }(expr)
   }
 
-  protected def ensureClassExtracted(csym: ClassSymbol): Unit = trace(i"Extractor#ensureClassExtracted $csym", ptyper)
+  protected def ensureClassExtracted(csym: Symbol): Unit = trace(i"Extractor#ensureClassExtracted $csym", ptyper)
   {
     val cid = xst.symbolToId(csym)
     xst.addClassIfNew(cid) { () =>
@@ -384,7 +384,7 @@ trait ClassExtractor {this: Extractor =>
       }
 
       val methods: Seq[trees.FunDef] =
-        csym.classInfo.allMembers
+        csym.info.allMembers
           .filter(d => d.isTerm && d.symbol.owner == csym)
           .map(funDefFromDenot)
 
@@ -395,7 +395,7 @@ trait ClassExtractor {this: Extractor =>
         flags +:= trees.IsADT
         val ADTSort(sort, constructors) = adtSort.get
         val others = (sort +: constructors).filter(_ != csym)
-        others.filter(_.isClass).map(_.asClass).foreach(ensureClassExtracted)
+        others.foreach(ensureClassExtracted)
         if (csym != sort) flags +:= trees.ExtendsAbstract(xst.symbolToId(sort))
         else if (ADTSort.isAbstractADT(csym)) flags +:= trees.IsAbstract
       }

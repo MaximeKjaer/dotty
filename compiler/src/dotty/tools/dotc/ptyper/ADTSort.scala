@@ -13,7 +13,7 @@ object ADTSort {
     val isAbstract = isAbstractADT(symbol)
     val isConstructor = isADTConstructor(symbol)
     val adtBreakingBehavior = hasADTBreakingBehavior(symbol) || inheritsADTBreakingBehavior(symbol)
-    val isADT = symbol.isClass && (isAbstract || isConstructor) && !adtBreakingBehavior
+    val isADT = (isAbstract || isConstructor) && !adtBreakingBehavior
 
     if (isADT) {
       if (isAbstract) {
@@ -42,7 +42,7 @@ object ADTSort {
 
   private def findSort(constructorSymbol: Symbol)(implicit ctx: Context): Option[Symbol] = {
     assert(isADTConstructor(constructorSymbol))
-    val parents = constructorSymbol.asClass.classParents.map(_.classSymbol)
+    val parents = constructorSymbol.info.parents.map(_.classSymbol)
     parents.find(isAbstractADT)
   }
 
