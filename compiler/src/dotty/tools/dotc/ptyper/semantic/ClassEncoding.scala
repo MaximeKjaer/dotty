@@ -123,13 +123,6 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
       transformer.transform(fd1)
     }
 
-    // Make ADT sort
-    def transformADT(cd: s.ClassDef): t.ADTSort = {
-      mkSort(cd.id)() {
-        case Seq() => Seq((cd.id, cd.cnstrParams.map(transformer.transform)))
-      }
-    }
-
     def getSort(cd: s.ClassDef): Id = {
       val extendsFlag = cd.flags.collectFirst {
         case s.ExtendsAbstract(cls) => cls
