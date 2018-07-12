@@ -35,6 +35,7 @@ class Extractor(_xst: ExtractionState, _ctx: Context)
 
   /* Solver interface */
 
+  // Construct Inox query that solves the question subject <:< rhsTpe
   final def query(pcs: List[PathCond], rhsTp: PredicateRefinedType, subject: RefType): Expr = {
     val predExpr = topLevelPredicate(rhsTp, subject)
 
@@ -96,8 +97,17 @@ class Extractor(_xst: ExtractionState, _ctx: Context)
     getOrCreateAdHocRef(checkErrorType(refTp), ephemeral = true)  // force creation of RefType binding
 }
 
-
+/**
+  * An ephemeral ref is a variable that may be defined in terms of other variables.
+  * It functions as an intermediate representation of a variable, so that the variable
+  * can be extracted and reused in other contexts (such as an Inox query) with no immediate
+  * concern for its dependencies, which can be restored.
+  *
+  * @param toVariable the Inox variable
+  * @param body the Inox expression defining the variable
+  */
 protected sealed case class EphemeralRef(toVariable: Var, body: Expr) {
+  // Dependencies are the set of variables in the body that correspond to a RefType
   def dependencies(xst: ExtractionState): Set[Var] = trees.exprOps.collect {
     case v: trees.Variable => xst.getRefTypeFromVar(v).map(_ => v).toSet
     case _ => Set.empty[Var]
@@ -247,6 +257,7 @@ trait TypeExtractor { this: ExtractorBase =>
   @inline protected def ignoreInAnd(sym: Symbol): Boolean =
     (sym == defn.SingletonClass) || (sym == defn.ProductClass)
 
+  // Converts a Dotty type to an Inox type
   def ixType(tp: Type): trees.Type = {
     def rec(tp: Type): trees.Type = tp match {
       case tp if tp.typeSymbol == defn.CharClass    => trees.CharType()
@@ -470,7 +481,7 @@ trait ExprExtractor { this: Extractor =>
       if (defn.isFunctionType(tp)) anyValueOfType(tp)
       else                         typ(tp.superType)  // FIXME(gsps): Unsound? (Should this be `tp.lowerBound` in the rhs extraction?)
 
-    assert(tp.isValueType)
+    assert(tp.isValueType, s"$tp is not a value type")
     normalizedApplication(checkErrorType(tp.widenExpr.dealias.stripTypeVar)) match {
       case tp: ConstantType   => constantType(tp)
       case tp: TermRef        => termRef(tp)
@@ -510,6 +521,7 @@ trait ExprExtractor { this: Extractor =>
     owner.enclosingClass == sym.enclosingClass && sym.owner == sym.enclosingClass ||
     sym.owner.isStaticOwner
 
+  // Gets or create an EphemeralRef or a global FunDef corresponding to refTp
   final protected def getOrCreateAdHocRef(refTp: RefType, ephemeral: Boolean)(implicit xctx: ExtractionContext): Expr =
   {
     def id = FreshIdentifier(Utils.qualifiedNameString(refTp))
@@ -526,6 +538,7 @@ trait ExprExtractor { this: Extractor =>
         new trees.FunDef(id, Seq.empty, Seq.empty, ixType(refTp), body, Seq(trees.IsGlobalBinding)))
   }
 
+  // Restores ephemeral refs' dependencies, and prepends them at Let expressions to the body.
   final protected def closeOverEphemeralRefs(body: Expr)(implicit xctx: ExtractionContext): Expr = {
     import scala.collection.mutable.{Map => MutableMap}
     var ephemerals = Set.empty[Var]
@@ -542,8 +555,10 @@ trait ExprExtractor { this: Extractor =>
     }
 
     val ephemeralsOrdered = inox.utils.GraphOps.topologicalSorting(dependencies.toMap) match {
-      case Right(vs) =>
-        vs
+      // Topological sort exists, because dependency graph is a DAG:
+      case Right(vs) => vs
+
+      // Topological sort does not exist, because dependency graph is cyclic:
       case Left(missingDeps) =>
         val toRefTp = xst.getRefTypeFromVar _
         val missingDepsMap = missingDeps.map(v => v -> dependencies(v).map(toRefTp)).toMap
