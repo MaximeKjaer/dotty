@@ -362,6 +362,13 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
   def ref(sym: Symbol)(implicit ctx: Context): Tree =
     ref(NamedType(sym.owner.thisType, sym.name, sym.denot))
 
+  def appliedTermRef(tp: AppliedTermRef)(implicit ctx: Context): Tree = {
+    val args = tp.args.map(singleton)
+    val fn = singleton(tp.fn)
+    if (tp.isTypeApply) TypeApply(fn, args)
+    else Apply(fn, args)
+  }
+
   private def followOuterLinks(t: Tree)(implicit ctx: Context) = t match {
     case t: This if ctx.erasedTypes && !(t.symbol == ctx.owner.enclosingClass || t.symbol.isStaticOwner) =>
       // after erasure outer paths should be respected
@@ -371,6 +378,7 @@ object tpd extends Trees.Instance[Type] with TypedTreeInfo {
   }
 
   def singleton(tp: Type)(implicit ctx: Context): Tree = tp match {
+    case tp: AppliedTermRef => appliedTermRef(tp)
     case tp: TermRef => ref(tp)
     case tp: ThisType => This(tp.cls)
     case tp: SkolemType => singleton(tp.narrow)
