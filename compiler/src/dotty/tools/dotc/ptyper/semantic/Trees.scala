@@ -60,6 +60,11 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
   sealed case class ClassDef(id: Id, cnstrParams: Seq[ValDef], flags: Seq[Flag]) extends Tree {
     def methods(implicit s: Symbols): Seq[FunDef] =
       s.getMethods(id)
+
+    def getCnstrParam(field: Id)(implicit s: Symbols): Option[ValDef] =
+      s.lookupFunction(field).flatMap(_.flags.collectFirst {
+        case IsParamAccessor(i) if cnstrParams.isDefinedAt(i) => cnstrParams(i)
+      })
   }
 
 
@@ -77,26 +82,9 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
   }
 
   sealed case class ClassSelector(recv: Expr, field: Id) extends Expr with CachingTyped {
-    // Cached computation of constructor parameter
-    private var lastSymbols: Symbols = _
-    private var lastCnstrParam: Option[ValDef] = None
-    private def computeCnstrParam(implicit s: Symbols): Option[ValDef] = recv.getType match {
-      case ClassType(cls) =>
-        val paramIndex = s.lookupFunction(field).flatMap(_.flags.collectFirst {
-          case IsParamAccessor(i) => i
-        })
-        val cnstrParams = s.lookupClass(cls).map(_.cnstrParams)
-        if (paramIndex.isDefined) cnstrParams.map(params => params(paramIndex.get))
-        else None
+    def cnstrParam(implicit s: Symbols): Option[ValDef] = recv.getType match {
+      case ClassType(cls) => s.lookupClass(cls).flatMap(_.getCnstrParam(field))
       case _ => None
-    }
-
-    def cnstrParam(implicit s: Symbols): Option[ValDef] = {
-      if (s ne lastSymbols) {
-        lastSymbols = s
-        lastCnstrParam = computeCnstrParam
-      }
-      lastCnstrParam
     }
 
     override protected def computeType(implicit s: Symbols): Type = recv.getType match {
