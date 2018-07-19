@@ -66,13 +66,24 @@ class ClassEncoding extends inox.ast.SymbolTransformer { self =>
 
       case cs@s.ClassSelector(recv, field) =>
         def functionInvocation = t.FunctionInvocation(field, Seq.empty, Seq(transform(recv)))
+
+        def extractPredicate(param: s.ValDef): Option[t.Expr] = {
+          val trecv = transform(recv)
+          val tparam = transform(param)
+          val freshParam = tparam.freshen
+          val freshVar = freshParam.toVariable
+          val predicate = cs.predicateMethod(syms).map(p => t.FunctionInvocation(p, Seq.empty, Seq(trecv, freshVar)))
+          val selector = t.ADTSelector(trecv, tparam.id)
+          val equalsADTValue = t.Equals(freshVar, selector)
+          val choose = predicate.map(pred => t.Choose(freshParam, t.And(equalsADTValue, pred)))
+          choose.orElse(Some(selector))
+        }
+
         recv.getType(syms) match {
           case s.ClassType(cls) if adtIds.contains(cls) =>
-            cs.cnstrParam(syms) match {
-              case Some(param) => t.ADTSelector(transform(recv), param.id)
-              case _ => functionInvocation
-            }
-          case _ => functionInvocation
+            cs.cnstrParam(syms).flatMap(extractPredicate).getOrElse(functionInvocation)
+          case _ =>
+            functionInvocation
         }
 
       case s.MethodInvocation(recv, method, args) =>

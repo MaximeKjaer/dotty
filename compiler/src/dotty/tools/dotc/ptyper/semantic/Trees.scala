@@ -87,6 +87,11 @@ abstract class Trees extends inox.ast.Trees { self: Trees =>
       case _ => None
     }
 
+    def predicateMethod(implicit s: Symbols): Option[Id] =
+      s.lookupFunction(field).map(_.fullBody).collect {
+        case Choose(_, MethodInvocation(_, id, _)) => id
+      }
+
     override protected def computeType(implicit s: Symbols): Type = recv.getType match {
       case ClassType(cls) =>
         val methodTpe = s.lookupClass(cls).flatMap(_.methods.find(m => m.id == field)).map(_.returnType)
