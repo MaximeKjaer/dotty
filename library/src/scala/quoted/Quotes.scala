@@ -19,7 +19,7 @@ transparent inline def quotes(using inline q: Quotes): q.type = q
  *  Used to perform all operations on quoted `Expr` or `Type`.
  *
  *  It contains the low-level Typed AST API metaprogramming API.
- *  This API does not have the static type guarantiees that `Expr` and `Type` provide.
+ *  This API does not have the static type guarantees that `Expr` and `Type` provide.
  */
 trait Quotes { self: runtime.QuoteUnpickler & runtime.QuoteMatching =>
 
